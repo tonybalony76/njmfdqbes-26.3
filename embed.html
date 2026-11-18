@@ -1,0 +1,52 @@
+<!-- Minecraft 26.3-JM: paste this entire block into a Google Sites code embed -->
+<div id="minecraft-root" style="width:100%;height:600px;background:#000;color:#fff;display:flex;align-items:center;justify-content:center;flex-direction:column;font:14px Arial,sans-serif;">
+  <div id="minecraft-status">Loading Minecraft files…</div>
+  <div style="width:min(80%,420px);height:8px;background:#333;margin-top:14px;border-radius:8px;overflow:hidden;">
+    <div id="minecraft-progress" style="width:0%;height:100%;background:#4caf50;"></div>
+  </div>
+</div>
+<script>
+(async () => {
+  const root = document.getElementById('minecraft-root');
+  const status = document.getElementById('minecraft-status');
+  const progress = document.getElementById('minecraft-progress');
+  const base = 'https://cdn.jsdelivr.net/npm/@tonybalony76/njmfdqbes-26.3@1.0.0';
+  try {
+    status.textContent = 'Loading file list…';
+    const response = await fetch(base + '/manifest.json');
+    if (!response.ok) throw new Error('Manifest request failed: ' + response.status);
+    const manifest = await response.json();
+    const parts = [];
+    let received = 0;
+    for (let i = 0; i < manifest.chunkCount; i++) {
+      status.textContent = 'Loading game files… ' + (i + 1) + '/' + manifest.chunkCount;
+      const name = 'part-' + String(i).padStart(3, '0') + '.bin';
+      const partResponse = await fetch(base + '/chunks/' + name);
+      if (!partResponse.ok) throw new Error(name + ' failed: ' + partResponse.status);
+      const data = await partResponse.arrayBuffer();
+      parts.push(new Uint8Array(data));
+      received += data.byteLength;
+      progress.style.width = Math.round(received / manifest.totalBytes * 100) + '%';
+    }
+    status.textContent = 'Assembling Minecraft…';
+    const combined = new Uint8Array(received);
+    let offset = 0;
+    for (const part of parts) {
+      combined.set(part, offset);
+      offset += part.length;
+    }
+    const blob = new Blob([combined], {type: 'text/html'});
+    const url = URL.createObjectURL(blob);
+    root.innerHTML = '';
+    const frame = document.createElement('iframe');
+    frame.src = url;
+    frame.title = 'Minecraft 26.3-JM';
+    frame.allow = 'fullscreen; autoplay; gamepad';
+    frame.style.cssText = 'width:100%;height:100%;border:0;background:#000;';
+    root.appendChild(frame);
+  } catch (error) {
+    status.textContent = 'Minecraft could not load: ' + error.message;
+    status.style.color = '#ff7777';
+  }
+})();
+</script>
