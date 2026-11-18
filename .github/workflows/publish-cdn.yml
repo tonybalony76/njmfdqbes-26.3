@@ -1,63 +1,58 @@
-name: Build and publish Minecraft CDN package
+name: Build and publish Minecraft CDN files
 
 on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
         with:
-          node-version: 22
-          registry-url: https://registry.npmjs.org
+          fetch-depth: 0
+
       - name: Download authorized game build
         run: |
           curl -fL --retry 3 \
             "https://github.com/joeymavv/26.3-JM/releases/download/v26.3-jm.1/26.3-fixed.html" \
             -o 26.3-fixed.html
           echo "1716c4673de4ab5b03ac9ac6ebe8d4db1358f6008825b84fcb4bb05c7228a610  26.3-fixed.html" | sha256sum -c -
+
       - name: Split into CDN-sized chunks
         run: |
-          mkdir -p package/chunks
+          rm -rf cdn
+          mkdir -p cdn/chunks
           node <<'NODE'
           const fs = require('fs');
+          const crypto = require('crypto');
           const input = fs.readFileSync('26.3-fixed.html');
           const size = 10 * 1024 * 1024;
           let index = 0;
           for (let offset = 0; offset < input.length; offset += size) {
             const chunk = input.subarray(offset, Math.min(offset + size, input.length));
-            fs.writeFileSync(`package/chunks/part-${String(index).padStart(3, '0')}.bin`, chunk);
+            fs.writeFileSync(`cdn/chunks/part-${String(index).padStart(3, '0')}.bin`, chunk);
             index++;
           }
-          fs.writeFileSync('package/manifest.json', JSON.stringify({
-            name: '@tonybalony76/njmfdqbes-26.3',
-            version: '1.0.0',
+          fs.writeFileSync('cdn/manifest.json', JSON.stringify({
             chunkCount: index,
             chunkSize: size,
             totalBytes: input.length,
-            sha256: require('crypto').createHash('sha256').update(input).digest('hex')
+            sha256: crypto.createHash('sha256').update(input).digest('hex')
           }, null, 2));
           console.log(`Created ${index} chunks from ${input.length} bytes`);
           NODE
-      - name: Create npm package metadata
+
+      - name: Commit CDN files to this repository
         run: |
-          cat > package/package.json <<'JSON'
-          {
-            "name": "@tonybalony76/njmfdqbes-26.3",
-            "version": "1.0.0",
-            "description": "Chunked browser build of Minecraft 26.3-JM",
-            "license": "UNLICENSED",
-            "files": ["chunks/", "manifest.json"],
-            "publishConfig": { "access": "public" }
-          }
-          JSON
-      - name: Publish to npm
-        run: npm publish --access public
-        working-directory: package
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add cdn/
+          if git diff --cached --quiet; then
+            echo "CDN files are already up to date."
+          else
+            git commit -m "Publish Minecraft 26.3-JM CDN files"
+            git push
+          fi
