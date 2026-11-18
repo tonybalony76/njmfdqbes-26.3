@@ -1,90 +1,108 @@
 <!-- Minecraft 26.3-JM: paste this entire block into a Google Sites code embed -->
-<div id="minecraft-root" style="width:100%;height:600px;background:#000;color:#fff;display:flex;align-items:center;justify-content:center;flex-direction:column;font:14px Arial,sans-serif;">
-  <div id="minecraft-status">Loading Minecraft files…</div>
-  <div style="width:min(80%,420px);height:8px;background:#333;margin-top:14px;border-radius:8px;overflow:hidden;">
+<div id="minecraft-launcher" style="width:100%;min-height:180px;padding:24px;box-sizing:border-box;background:#111;color:#fff;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;font:14px Arial,sans-serif;text-align:center;">
+  <div style="font-size:18px;font-weight:bold;">Minecraft 26.3-JM</div>
+  <button id="minecraft-open" type="button" style="padding:12px 22px;border:0;border-radius:6px;background:#4caf50;color:#fff;font:bold 15px Arial;cursor:pointer;">Open Minecraft in new tab</button>
+  <div id="minecraft-status" aria-live="polite">Opens the game in a separate about:blank tab.</div>
+  <div style="width:min(80%,420px);height:8px;background:#333;border-radius:8px;overflow:hidden;">
     <div id="minecraft-progress" style="width:0%;height:100%;background:#4caf50;"></div>
   </div>
 </div>
 <script>
-(async () => {
-  const root = document.getElementById('minecraft-root');
+(() => {
+  const button = document.getElementById('minecraft-open');
   const status = document.getElementById('minecraft-status');
   const progress = document.getElementById('minecraft-progress');
   const base = 'https://cdn.jsdelivr.net/gh/tonybalony76/njmfdqbes-26.3@main/cdn';
+  let loading = false;
 
-  try {
-    status.textContent = 'Loading file list…';
-    const response = await fetch(base + '/manifest.json');
-    if (!response.ok) throw new Error('Manifest request failed: ' + response.status);
-    const manifest = await response.json();
+  button.addEventListener('click', async () => {
+    if (loading) return;
 
-    if (!Number.isInteger(manifest.chunkCount) || manifest.chunkCount < 1 ||
-        !Number.isInteger(manifest.totalBytes) || manifest.totalBytes < 1) {
-      throw new Error('The CDN manifest is invalid.');
+    // Open synchronously during the click so the browser recognizes the user gesture.
+    const gameWindow = window.open('about:blank', '_blank');
+    if (!gameWindow) {
+      status.textContent = 'The new tab was blocked. Allow pop-ups for this site, then try again.';
+      return;
     }
 
-    const parts = [];
-    let received = 0;
-    for (let i = 0; i < manifest.chunkCount; i++) {
-      status.textContent = 'Loading game files… ' + (i + 1) + '/' + manifest.chunkCount;
-      const name = 'part-' + String(i).padStart(3, '0') + '.bin';
-      const partResponse = await fetch(base + '/chunks/' + name);
-      if (!partResponse.ok) throw new Error(name + ' failed: ' + partResponse.status);
-      const data = await partResponse.arrayBuffer();
-      parts.push(new Uint8Array(data));
-      received += data.byteLength;
-      progress.style.width = Math.min(100, Math.round(received / manifest.totalBytes * 100)) + '%';
-    }
+    loading = true;
+    button.disabled = true;
+    button.textContent = 'Loading Minecraft…';
+    status.textContent = 'Preparing the new tab…';
 
-    if (received !== manifest.totalBytes) throw new Error('Downloaded file size does not match the manifest.');
-
-    status.textContent = 'Assembling Minecraft…';
-    const combined = new Uint8Array(received);
-    let offset = 0;
-    for (const part of parts) {
-      combined.set(part, offset);
-      offset += part.length;
-    }
-
-    const blob = new Blob([combined], {type: 'text/html'});
-    const url = URL.createObjectURL(blob);
-
-    root.innerHTML = '';
-    root.style.cssText = 'width:100%;height:600px;background:#000;display:flex;flex-direction:column;overflow:hidden;';
-    
-    const toolbar = document.createElement('div');
-    toolbar.style.cssText = 'height:42px;flex:0 0 42px;display:flex;align-items:center;justify-content:center;background:#202020;';
-    const fullscreenButton = document.createElement('button');
-    fullscreenButton.type = 'button';
-    fullscreenButton.textContent = 'Enter fullscreen';
-    fullscreenButton.style.cssText = 'padding:7px 16px;border:0;border-radius:5px;background:#4caf50;color:#fff;font:bold 14px Arial;cursor:pointer;';
-    toolbar.appendChild(fullscreenButton);
-
-    const frame = document.createElement('iframe');
-    frame.src = url;
-    frame.title = 'Minecraft 26.3-JM';
-    frame.allow = 'pointer-lock; fullscreen; autoplay; gamepad';
-    frame.setAttribute('allowfullscreen', '');
-    frame.style.cssText = 'display:block;flex:1 1 auto;width:100%;height:calc(100% - 42px);min-height:0;border:0;background:#000;';
-
-    fullscreenButton.addEventListener('click', async () => {
-      try {
-        if (frame.requestFullscreen) {
-          await frame.requestFullscreen();
-          fullscreenButton.textContent = 'Fullscreen active — click the game to capture mouse';
-        } else {
-          fullscreenButton.textContent = 'Fullscreen is not supported here';
-        }
-      } catch (error) {
-        fullscreenButton.textContent = 'Fullscreen blocked: ' + error.message;
+    const showTabStatus = (message) => {
+      if (!gameWindow.closed) {
+        gameWindow.document.open();
+        gameWindow.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Minecraft 26.3-JM</title><style>html,body{margin:0;width:100%;height:100%;background:#111;color:#fff;font:16px Arial,sans-serif}body{display:flex;align-items:center;justify-content:center;flex-direction:column;gap:14px}.bar{width:min(80%,420px);height:8px;background:#333;border-radius:8px;overflow:hidden}.fill{height:100%;width:' + Math.max(0, Math.min(100, Math.round(progressValue))) + '%;background:#4caf50}</style></head><body><div>' + message + '</div><div class="bar"><div class="fill"></div></div></body></html>');
+        gameWindow.document.close();
       }
-    });
+    };
 
-    root.appendChild(toolbar);
-    root.appendChild(frame);
-  } catch (error) {
-    status.textContent = 'Minecraft could not load: ' + error.message;
-    status.style.color = '#ff7777';
-  }
+    let progressValue = 0;
+    try {
+      status.textContent = 'Loading game files…';
+      showTabStatus('Loading Minecraft files…');
+
+      const response = await fetch(base + '/manifest.json');
+      if (!response.ok) throw new Error('Manifest request failed: ' + response.status);
+      const manifest = await response.json();
+
+      if (!Number.isInteger(manifest.chunkCount) || manifest.chunkCount < 1 ||
+          !Number.isInteger(manifest.totalBytes) || manifest.totalBytes < 1) {
+        throw new Error('The CDN manifest is invalid.');
+      }
+
+      const parts = [];
+      let received = 0;
+      for (let i = 0; i < manifest.chunkCount; i++) {
+        const name = 'part-' + String(i).padStart(3, '0') + '.bin';
+        status.textContent = 'Loading game files… ' + (i + 1) + '/' + manifest.chunkCount;
+        showTabStatus('Loading Minecraft files… ' + (i + 1) + '/' + manifest.chunkCount);
+        const partResponse = await fetch(base + '/chunks/' + name);
+        if (!partResponse.ok) throw new Error(name + ' failed: ' + partResponse.status);
+        const data = await partResponse.arrayBuffer();
+        parts.push(new Uint8Array(data));
+        received += data.byteLength;
+        progressValue = received / manifest.totalBytes * 100;
+        progress.style.width = Math.min(100, Math.round(progressValue)) + '%';
+        status.textContent = 'Downloaded ' + Math.round(progressValue) + '%';
+        showTabStatus('Loading Minecraft files… ' + Math.round(progressValue) + '%');
+      }
+
+      if (received !== manifest.totalBytes) throw new Error('Downloaded file size does not match the manifest.');
+
+      status.textContent = 'Assembling Minecraft…';
+      showTabStatus('Assembling Minecraft…');
+
+      const combined = new Uint8Array(received);
+      let offset = 0;
+      for (const part of parts) {
+        combined.set(part, offset);
+        offset += part.length;
+      }
+
+      const html = new TextDecoder('utf-8').decode(combined);
+      if (gameWindow.closed) throw new Error('The game tab was closed before loading finished.');
+
+      // Write the game into the already-open about:blank tab (not an iframe).
+      gameWindow.document.open();
+      gameWindow.document.write(html);
+      gameWindow.document.close();
+
+      status.textContent = 'Minecraft opened in the new tab.';
+      button.textContent = 'Minecraft opened';
+    } catch (error) {
+      const message = 'Minecraft could not load: ' + error.message;
+      status.textContent = message;
+      if (!gameWindow.closed) {
+        gameWindow.document.open();
+        gameWindow.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Minecraft loading error</title></head><body style="background:#111;color:#fff;font:16px Arial;padding:24px">' + message.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])) + '</body></html>');
+        gameWindow.document.close();
+      }
+      button.disabled = false;
+      button.textContent = 'Try again';
+      loading = false;
+    }
+  });
 })();
 </script>
