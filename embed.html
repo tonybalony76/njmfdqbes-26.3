@@ -7,6 +7,7 @@
 </div>
 <script>
 (async () => {
+  const root = document.getElementById('minecraft-root');
   const status = document.getElementById('minecraft-status');
   const progress = document.getElementById('minecraft-progress');
   const base = 'https://cdn.jsdelivr.net/gh/tonybalony76/njmfdqbes-26.3@main/cdn';
@@ -24,7 +25,6 @@
 
     const parts = [];
     let received = 0;
-
     for (let i = 0; i < manifest.chunkCount; i++) {
       status.textContent = 'Loading game files… ' + (i + 1) + '/' + manifest.chunkCount;
       const name = 'part-' + String(i).padStart(3, '0') + '.bin';
@@ -36,9 +36,7 @@
       progress.style.width = Math.min(100, Math.round(received / manifest.totalBytes * 100)) + '%';
     }
 
-    if (received !== manifest.totalBytes) {
-      throw new Error('Downloaded file size does not match the manifest.');
-    }
+    if (received !== manifest.totalBytes) throw new Error('Downloaded file size does not match the manifest.');
 
     status.textContent = 'Assembling Minecraft…';
     const combined = new Uint8Array(received);
@@ -48,12 +46,16 @@
       offset += part.length;
     }
 
-    // Run the game in this embed document instead of a nested iframe.
-    // This removes an extra iframe permission boundary for mouse input.
-    const gameHtml = new TextDecoder('utf-8').decode(combined);
-    document.open();
-    document.write(gameHtml);
-    document.close();
+    const blob = new Blob([combined], {type: 'text/html'});
+    const url = URL.createObjectURL(blob);
+    root.innerHTML = '';
+
+    const frame = document.createElement('iframe');
+    frame.src = url;
+    frame.title = 'Minecraft 26.3-JM';
+    frame.allow = 'pointer-lock; fullscreen; autoplay; gamepad';
+    frame.style.cssText = 'display:block;width:100%;height:100%;border:0;background:#000;';
+    root.appendChild(frame);
   } catch (error) {
     status.textContent = 'Minecraft could not load: ' + error.message;
     status.style.color = '#ff7777';
