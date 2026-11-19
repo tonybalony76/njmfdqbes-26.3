@@ -52,22 +52,29 @@
         throw new Error('The CDN manifest is invalid.');
       }
 
-      const parts = [];
-      let received = 0;
-      for (let i = 0; i < manifest.chunkCount; i++) {
+      // Fetch every chunk at the same time instead of waiting for each one.
+      const chunkPromises = Array.from({ length: manifest.chunkCount }, async (_, i) => {
         const name = 'part-' + String(i).padStart(3, '0') + '.bin';
-        status.textContent = 'Loading game files… ' + (i + 1) + '/' + manifest.chunkCount;
-        showTabStatus('Loading Minecraft files… ' + (i + 1) + '/' + manifest.chunkCount);
         const partResponse = await fetch(base + '/chunks/' + name);
         if (!partResponse.ok) throw new Error(name + ' failed: ' + partResponse.status);
         const data = await partResponse.arrayBuffer();
-        parts.push(new Uint8Array(data));
-        received += data.byteLength;
+        return { index: i, data: new Uint8Array(data), bytes: data.byteLength, name };
+      });
+
+      const parts = new Array(manifest.chunkCount);
+      let received = 0;
+      let completed = 0;
+      const downloads = await Promise.all(chunkPromises.map(async (promise) => {
+        const part = await promise;
+        parts[part.index] = part.data;
+        received += part.bytes;
+        completed++;
         progressValue = received / manifest.totalBytes * 100;
         progress.style.width = Math.min(100, Math.round(progressValue)) + '%';
-        status.textContent = 'Downloaded ' + Math.round(progressValue) + '%';
+        status.textContent = 'Downloaded ' + Math.round(progressValue) + '% (' + completed + '/' + manifest.chunkCount + ')';
         showTabStatus('Loading Minecraft files… ' + Math.round(progressValue) + '%');
-      }
+        return part;
+      }));
 
       if (received !== manifest.totalBytes) throw new Error('Downloaded file size does not match the manifest.');
 
